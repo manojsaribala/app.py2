@@ -1,0 +1,290 @@
+
+Cell 1: Import Libraries
+This cell is provided and imports the necessary libraries. A typical setup includes:
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import numpy as np
+import matplotlib.pyplot as plt
+Explanation: Imports TensorFlow for building the CNN, ImageDataGenerator for data preprocessing, NumPy for array operations, and Matplotlib for plotting.
+Cell 2: Download Data and Set Variables
+This cell is also provided and sets up the dataset and key variables. Based on standard practice for this dataset, it likely looks like this:
+# Download dataset (example, adjust URL/path as per your Colab notebook)
+_URL = 'https://storage.googleapis.com/mledu-datasets/cats_and_dogs_filtered.zip'
+zip_dir = tf.keras.utils.get_file('cats_and_dogs_filtered.zip', origin=_URL, extract=True)
+
+import os
+base_dir = os.path.join(os.path.dirname(zip_dir), 'cats_and_dogs_filtered')
+train_dir = os.path.join(base_dir, 'train')
+validation_dir = os.path.join(base_dir, 'validation')
+test_dir = os.path.join(base_dir, 'test')
+
+# Directory paths
+train_cats_dir = os.path.join(train_dir, 'cats')
+train_dogs_dir = os.path.join(train_dir, 'dogs')
+validation_cats_dir = os.path.join(validation_dir, 'cats')
+validation_dogs_dir = os.path.join(validation_dir, 'dogs')
+
+# Image dimensions
+IMG_HEIGHT = 150
+IMG_WIDTH = 150
+BATCH_SIZE = 32
+Explanation:
+Downloads and extracts the dataset (2,000 training images, 1,000 validation images, 50 test images).
+Sets directory paths for train, validation, and test.
+Defines image dimensions (150x150) and batch size (32). You can tweak BATCH_SIZE or epochs later if needed.
+Cell 3: Create Image Data Generators
+You need to create ImageDataGenerator instances for the train, validation, and test datasets, rescaling pixel values from [0, 255] to [0, 1]. Use flow_from_directory with the specified parameters.
+# 3
+train_image_generator = ImageDataGenerator(rescale=1./255)
+validation_image_generator = ImageDataGenerator(rescale=1./255)
+test_image_generator = ImageDataGenerator(rescale=1./255)
+
+train_data_gen = train_image_generator.flow_from_directory(
+    train_dir,
+    target_size=(IMG_HEIGHT, IMG_WIDTH),
+    batch_size=BATCH_SIZE,
+    class_mode='binary'
+)
+
+val_data_gen = validation_image_generator.flow_from_directory(
+    validation_dir,
+    target_size=(IMG_HEIGHT, IMG_WIDTH),
+    batch_size=BATCH_SIZE,
+    class_mode='binary'
+)
+
+test_data_gen = test_image_generator.flow_from_directory(
+    test_dir,
+    target_size=(IMG_HEIGHT, IMG_WIDTH),
+    batch_size=BATCH_SIZE,
+    class_mode='binary',
+    shuffle=False
+)
+Explanation:
+Rescale: Divides pixel values by 255 to normalize them to [0, 1].
+flow_from_directory:
+train_dir and validation_dir have cats and dogs subdirectories, so class_mode='binary' assigns labels (0 for cats, 1 for dogs).
+test_dir has no subdirectories and images are unlabeled, but we still use class_mode='binary' to process images (labels are ignored).
+shuffle=False for test_data_gen ensures predictions match the expected order for evaluation.
+Output: Should print:
+Found 2000 images belonging to 2 classes.
+Found 1000 images belonging to 2 classes.
+Found 50 images belonging to 1 class.
+Cell 4: Plot Images (Provided)
+This cell plots five random training images using a provided plotImages function. Assuming train_data_gen is correct, running this cell will display images. The function might look like:
+# 4
+def plotImages(images_arr, probabilities=None):
+    fig, axes = plt.subplots(1, len(images_arr), figsize=(5*len(images_arr), 3))
+    if probabilities is None:
+        for img, ax in zip(images_arr, axes):
+            ax.imshow(img)
+            ax.axis('off')
+    else:
+        for img, probability, ax in zip(images_arr, probabilities, axes):
+            ax.imshow(img)
+            ax.set_title(f"{probability:.2f}")
+            ax.axis('off')
+    plt.show()
+
+sample_training_images, _ = next(train_data_gen)
+plotImages(sample_training_images[:5])
+Explanation: Retrieves a batch of images from train_data_gen and plots five using plotImages. No action is needed if train_data_gen is set up correctly.
+Cell 5: Data Augmentation
+Recreate train_image_generator with 4-6 random transformations to prevent overfitting, keeping the rescale parameter.
+# 5
+train_image_generator = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=40,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True
+)
+Explanation:
+Transformations:
+rotation_range=40: Rotates images up to 40 degrees.
+width_shift_range=0.2: Shifts images horizontally by up to 20% of width.
+height_shift_range=0.2: Shifts images vertically by up to 20% of height.
+shear_range=0.2: Applies shear transformation.
+zoom_range=0.2: Zooms in/out by up to 20%.
+horizontal_flip=True: Randomly flips images horizontally.
+These augmentations generate varied training images to reduce overfitting.
+Rescale remains 1./255 for consistency.
+Cell 6: Plot Augmented Images (Provided)
+This cell recreates train_data_gen with the augmented generator and plots a single image five times with different augmentations. No action is needed, but it might look like:
+# 6
+train_data_gen = train_image_generator.flow_from_directory(
+    train_dir,
+    target_size=(IMG_HEIGHT, IMG_WIDTH),
+    batch_size=BATCH_SIZE,
+    class_mode='binary'
+)
+
+augmented_images, _ = next(train_data_gen)
+plotImages(augmented_images[:5])
+Explanation: Visualizes the effect of data augmentation. The same image appears with different transformations.
+Cell 7: Build and Compile the Model
+Create a Keras Sequential CNN model with Conv2D, MaxPooling2D, and dense layers, then compile it.
+# 7
+model = tf.keras.Sequential([
+    tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
+    tf.keras.layers.MaxPooling2D(2, 2),
+    tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+    tf.keras.layers.MaxPooling2D(2, 2),
+    tf.keras.layers.Conv2D(128, (3, 3), activation='relu'),
+    tf.keras.layers.MaxPooling2D(2, 2),
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(512, activation='relu'),
+    tf.keras.layers.Dense(1, activation='sigmoid')
+])
+
+model.compile(
+    optimizer='adam',
+    loss='binary_crossentropy',
+    metrics=['accuracy']
+)
+Explanation:
+Model Architecture:
+Three Conv2D layers (32, 64, 128 filters) with relu activation to extract features.
+MaxPooling2D layers (2x2) reduce spatial dimensions, controlling overfitting.
+Flatten converts the feature maps to a 1D vector.
+A Dense layer with 512 units (relu) for high-level reasoning.
+A final Dense layer with 1 unit and sigmoid activation for binary classification (cat vs. dog).
+Compilation:
+optimizer='adam': Adaptive optimizer for efficient training.
+loss='binary_crossentropy': Suitable for binary classification.
+metrics=['accuracy']: Tracks training and validation accuracy.
+Cell 8: Train the Model
+Train the model using the fit method with the specified arguments.
+# 8
+EPOCHS = 20
+history = model.fit(
+    train_data_gen,
+    steps_per_epoch=train_data_gen.samples // BATCH_SIZE,
+    epochs=EPOCHS,
+    validation_data=val_data_gen,
+    validation_steps=val_data_gen.samples // BATCH_SIZE
+)
+Explanation:
+train_data_gen: Training data with augmentation.
+steps_per_epoch: 2000 // 32 ≈ 62 steps (total training images ÷ batch size).
+epochs: Set to 20 (you can tweak this, e.g., increase to 50 for better accuracy).
+validation_data: Uses val_data_gen for validation.
+validation_steps: 1000 // 32 ≈ 31 steps.
+Training may take several minutes, depending on Colab’s resources.
+Cell 9: Visualize Training Results (Provided)
+This cell plots training and validation accuracy/loss. A typical implementation is:
+# 9
+acc = history.history['accuracy']
+val_acc = history.history['val_accuracy']
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+
+epochs_range = range(EPOCHS)
+
+plt.figure(figsize=(8, 8))
+plt.subplot(1, 2, 1)
+plt.plot(epochs_range, acc, label='Training Accuracy')
+plt.plot(epochs_range, val_acc, label='Validation Accuracy')
+plt.legend(loc='lower right')
+plt.title('Training and Validation Accuracy')
+
+plt.subplot(1, 2, 2)
+plt.plot(epochs_range, loss, label='Training Loss')
+plt.plot(epochs_range, val_loss, label='Validation Loss')
+plt.legend(loc='upper right')
+plt.title('Training and Validation Loss')
+plt.show()
+Explanation: Visualizes model performance. Aim for validation accuracy ≥ 63% (ideally ≥ 70%).
+Cell 10: Make Predictions
+Predict probabilities for test images and plot them with plotImages.
+# 10
+probabilities = model.predict(test_data_gen).flatten()
+probabilities = [float(p) for p in probabilities]  # Convert to list of floats
+
+test_images, _ = next(test_data_gen)
+plotImages(test_images, probabilities)
+Explanation:
+model.predict(test_data_gen): Generates probabilities for the 50 test images.
+.flatten(): Converts the output to a 1D array of probabilities (0 to 1, where closer to 1 indicates “dog”).
+Convert to a list of floats for compatibility with plotImages.
+plotImages displays each test image with its predicted probability (e.g., 0.85 for 85% dog).
+Accuracy should align with validation accuracy from Cell 9.
+Cell 11: Evaluate Results (Provided)
+This cell checks if your model passes the 63% accuracy threshold. It’s provided, so no action is needed. It likely compares predictions against expected labels (not provided in the test set, so assume it’s handled by the course’s test script).
+
+COMPLETE CELLS CODE 
+
+# Cell 3
+train_image_generator = ImageDataGenerator(rescale=1./255)
+validation_image_generator = ImageDataGenerator(rescale=1./255)
+test_image_generator = ImageDataGenerator(rescale=1./255)
+
+train_data_gen = train_image_generator.flow_from_directory(
+    train_dir,
+    target_size=(IMG_HEIGHT, IMG_WIDTH),
+    batch_size=BATCH_SIZE,
+    class_mode='binary'
+)
+
+val_data_gen = validation_image_generator.flow_from_directory(
+    validation_dir,
+    target_size=(IMG_HEIGHT, IMG_WIDTH),
+    batch_size=BATCH_SIZE,
+    class_mode='binary'
+)
+
+test_data_gen = test_image_generator.flow_from_directory(
+    test_dir,
+    target_size=(IMG_HEIGHT, IMG_WIDTH),
+    batch_size=BATCH_SIZE,
+    class_mode='binary',
+    shuffle=False
+)
+
+# Cell 5
+train_image_generator = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=40,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True
+)
+
+# Cell 7
+model = tf.keras.Sequential([
+    tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
+    tf.keras.layers.MaxPooling2D(2, 2),
+    tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+    tf.keras.layers.MaxPooling2D(2, 2),
+    tf.keras.layers.Conv2D(128, (3, 3), activation='relu'),
+    tf.keras.layers.MaxPooling2D(2, 2),
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(512, activation='relu'),
+    tf.keras.layers.Dense(1, activation='sigmoid')
+])
+
+model.compile(
+    optimizer='adam',
+    loss='binary_crossentropy',
+    metrics=['accuracy']
+)
+
+# Cell 8
+EPOCHS = 20
+history = model.fit(
+    train_data_gen,
+    steps_per_epoch=train_data_gen.samples // BATCH_SIZE,
+    epochs=EPOCHS,
+    validation_data=val_data_gen,
+    validation_steps=val_data_gen.samples // BATCH_SIZE
+)
+
+# Cell 10
+probabilities = model.predict(test_data_gen).flatten()
+probabilities = [float(p) for p in probabilities]
+test_images, _ = next(test_data_gen)
+plotImages(test_images, probabilities)
